@@ -1,0 +1,6 @@
+/magento
+/magento/*
+.idea
+magento/
+.docker/logs/*
+.docker/flags

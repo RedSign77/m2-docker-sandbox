@@ -1,0 +1,171 @@
+version: '2'
+
+### --- SERVICES -------------------------------------------------------------------------------------------------------
+services:
+
+  ## Application code container
+  applications:
+    image: tianon/true
+    volumes:
+      - ${APPLICATION}:/var/www
+
+
+  ## PHP-FPM container
+  php-fpm:
+    build:
+      context: ./php-fpm
+      args:
+        - HOST_UID=${HOST_UID}
+      dockerfile: "Dockerfile"
+    volumes_from:
+      - applications
+    volumes:
+      - ./php-fpm/php.ini:/usr/local/etc/php/php.ini
+      - ./php-fpm/msmtprc:/etc/msmtprc
+    expose:
+      - "9000"
+    extra_hosts:
+      - "dockerhost:${DOCKER_HOST_IP}"
+    environment:
+      - COMPOSER_HOME=/composer
+    networks:
+      - frontend
+      - backend
+
+
+  ## Apache Server container
+  apache:
+    build:
+      context: ./apache
+    volumes_from:
+      - applications
+    volumes:
+      - ${APACHE_HOST_LOG_PATH}:/var/log/apache2
+      - ${APACHE_SITES_PATH}:/etc/apache2/sites-available
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:${COMPOSE_PROJECT_NAME}.localhost
+      - traefik.port=80
+    depends_on:
+      - php-fpm
+    networks:
+      - frontend
+      - backend
+
+
+  ## Database container
+  mariadb:
+    image: mariadb:10.3.27
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql:/var/lib/mysql
+    networks:
+      - backend
+
+
+  ## Redis cache container
+  redis:
+    image: redis:6.0.8
+    volumes:
+      - redis:/data
+    networks:
+      - backend
+
+
+  ## Elasticsearch container
+  elasticsearch:
+    image: elasticsearch:7.9.3
+    environment:
+      - cluster.name=${ES_CLUSTER_NAME}
+      - node.name=${ES_NODE_NAME}
+      - path.data=/usr/share/elasticsearch/data
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms${ES_JVM_HEAP} -Xmx${ES_JVM_HEAP}"
+    mem_limit: ${ES_MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch:/usr/share/elasticsearch/data
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:elasticsearch.localhost
+      - traefik.port=9200
+    networks:
+      - frontend
+      - backend
+
+
+  ## Traefik reverse proxy
+  traefik:
+    image: traefik:1.7-alpine
+    volumes:
+      - ./traefik:/etc/traefik
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik/certs:/certs
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:traefik.localhost
+      - traefik.port=8040
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - frontend
+
+
+  ## phpMyAdmin container
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    volumes:
+      - ./phpmyadmin/phpmyadmin.config.inc.php:/etc/phpmyadmin/config.inc.php
+    links:
+      - mariadb
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:phpmyadmin.localhost
+      - traefik.port=80
+    networks:
+      - frontend
+      - backend
+
+
+  ## Mailhog container
+  mailhog:
+    image: mailhog/mailhog
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:mailhog.localhost
+      - traefik.port=8025
+    networks:
+      - frontend
+      - backend
+
+
+### --- NETWORKS -------------------------------------------------------------------------------------------------------
+
+networks:
+  frontend:
+    external:
+      name: traefik
+  backend:
+    driver: "bridge"
+
+
+### --- VOLUMES --------------------------------------------------------------------------------------------------------
+
+volumes:
+  mysql:
+    driver: "local"
+  redis:
+    driver: "local"
+  elasticsearch:
+    driver: "local"
