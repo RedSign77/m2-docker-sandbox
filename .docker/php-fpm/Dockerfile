@@ -42,7 +42,7 @@ RUN usermod -u ${HOST_UID} www-data && \
 # Install Composer
 ENV COMPOSER_ALLOW_SUPERUSER 1
 ENV COMPOSER_HOME /tmp
-ENV COMPOSER_VERSION 1.10.20
+ENV COMPOSER_VERSION 2.0.11
 
 RUN set -eux; \
   curl --silent --fail --location --retry 3 --output /tmp/installer.php --url https://raw.githubusercontent.com/composer/getcomposer.org/cb19f2aa3aeaa2006c0cd69a7ef011eb31463067/web/installer; \
@@ -54,7 +54,7 @@ RUN set -eux; \
       echo 'Integrity check failed, installer is either corrupt or worse.' . PHP_EOL; \
       exit(1); \
     }"; \
-  php /tmp/installer.php --no-ansi --install-dir=/usr/bin --filename=composer --version=${COMPOSER_VERSION}; \
+  php /tmp/installer.php --no-ansi --install-dir=/usr/bin --filename=composer --version=${COMPOSER_VERSION} \
   composer --ansi --version --no-interaction;
 RUN mkdir /composer && chown www-data:www-data /composer
 RUN chown www-data:www-data /composer
